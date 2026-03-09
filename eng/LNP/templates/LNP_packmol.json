@@ -1,0 +1,158 @@
+{
+  "mode": "vesicle_bilayer",
+  "tolerance": 2.2,
+  "shell_thickness_A": 42.0,
+  "core_radius_A": 155.0,
+  "outer_radius_A": 225.0,
+  "drug_region": "core",
+  "drug_count": 40,
+  "components": [
+    {
+      "pdb": "MC3.pdb",
+      "role": "outer_leaflet",
+      "count": 150,
+      "head_atom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "tail_atom_ids": [
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ]
+    },
+    {
+      "pdb": "MC3.pdb",
+      "role": "inner_leaflet",
+      "count": 130,
+      "head_atom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "tail_atom_ids": [
+        31,
+        32,
+        33,
+        34,
+        35,
+        36,
+        37,
+        38,
+        39,
+        40,
+        41,
+        42,
+        43,
+        44,
+        45,
+        46
+      ]
+    },
+    {
+      "pdb": "DSPC.pdb",
+      "role": "outer_leaflet",
+      "count": 45,
+      "head_atom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "tail_atom_ids": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+      ]
+    },
+    {
+      "pdb": "DSPC.pdb",
+      "role": "inner_leaflet",
+      "count": 40,
+      "head_atom_ids": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
+      "tail_atom_ids": [
+        25,
+        26,
+        27,
+        28,
+        29,
+        30,
+        49,
+        50,
+        51,
+        52,
+        53,
+        54
+      ]
+    },
+    {
+      "pdb": "CHOL.pdb",
+      "role": "outer_leaflet",
+      "count": 120
+    },
+    {
+      "pdb": "CHOL.pdb",
+      "role": "inner_leaflet",
+      "count": 110
+    },
+    {
+      "pdb": "DMG_PEG2000.pdb",
+      "role": "outer_leaflet",
+      "count": 10
+    }
+  ]
+}

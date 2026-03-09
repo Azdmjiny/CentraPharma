@@ -1,0 +1,32 @@
+{
+  "mode": "matrix_shell",
+  "tolerance": 2.4,
+  "shell_thickness_A": 55.0,
+  "core_radius_A": 125.0,
+  "outer_radius_A": 215.0,
+  "drug_region": "core",
+  "drug_count": 40,
+  "components": [
+    {
+      "pdb": "PLGA50_50_20mer.pdb",
+      "role": "shell",
+      "count": 120,
+      "r_in_A": 125.0,
+      "r_out_A": 215.0
+    },
+    {
+      "pdb": "PLGA50_50_20mer.pdb",
+      "role": "shell",
+      "count": 40,
+      "r_in_A": 95.0,
+      "r_out_A": 170.0
+    },
+    {
+      "pdb": "PEG5k_ligand_stub.pdb",
+      "role": "shell",
+      "count": 10,
+      "r_in_A": 190.0,
+      "r_out_A": 230.0
+    }
+  ]
+}

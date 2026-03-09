@@ -1,0 +1,25 @@
+{
+  "mode": "matrix_shell",
+  "tolerance": 2.2,
+  "shell_thickness_A": 48.0,
+  "core_radius_A": 135.0,
+  "outer_radius_A": 220.0,
+  "drug_region": "core",
+  "drug_count": 40,
+  "components": [
+    {
+      "pdb": "COMPRITOL888ATO.pdb",
+      "role": "shell",
+      "count": 140,
+      "r_in_A": 135.0,
+      "r_out_A": 220.0
+    },
+    {
+      "pdb": "MIGLYOL812.pdb",
+      "role": "shell",
+      "count": 120,
+      "r_in_A": 120.0,
+      "r_out_A": 220.0
+    }
+  ]
+}
