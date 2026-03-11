@@ -1,4 +1,5 @@
 import pandas as pd
+from pathlib import Path
 from rdkit import Chem
 from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors, QED
 
@@ -37,8 +38,22 @@ def _calc_descriptors(smiles: str):
     }
 
 
+def _resolve_preferred_csv(csv_path: str) -> Path:
+    p = Path(csv_path).resolve()
+    if not p.exists():
+        raise FileNotFoundError(f"CSV 不存在: {p}")
+
+    enriched = p.with_name(f"{p.stem}_enriched.csv")
+    if enriched.exists():
+        print(f"[INFO] 优先读取 enriched CSV: {enriched}")
+        return enriched
+
+    return p
+
+
 def load_admet_candidates(csv_path: str, max_candidates: int = 12):
-    df = pd.read_csv(csv_path)
+    csv_file = _resolve_preferred_csv(csv_path)
+    df = pd.read_csv(csv_file)
     if df.empty:
         return []
 
@@ -50,13 +65,11 @@ def load_admet_candidates(csv_path: str, max_candidates: int = 12):
     herg_col = _pick_col(df, ["hERG", "herg"])
     ames_col = _pick_col(df, ["AMES", "ames"])
     caco2_col = _pick_col(df, ["Caco2", "caco2"])
-    qed_col = _pick_col(df, ["QED", "qed"])
+    qed_col = _pick_col(df, ["QED", "qed", "QED_ingest", "QED_rdkit"])
 
-    # ——新增：可选列（有就读，没有就算了）——
     pka_col = _pick_col(df, ["pKa", "pka", "pKa_base", "pKa_basic"])
-    logd_col = _pick_col(df, ["logD", "logD74", "logD_7.4", "logD7.4", "logD@7.4"])
-    tm_col = _pick_col(df, ["Tm", "tm", "melting_point", "meltingPoint", "mp"])
-    sol_col = _pick_col(df, ["Solubility", "solubility", "S", "aqueous_solubility"])
+    logd74_col = _pick_col(df, ["logD74", "logD_7.4", "logD7.4", "logD@7.4", "logD74_input", "logD"])
+    logd7_col = _pick_col(df, ["logD7", "logD_7", "logD@7", "logD7_input"])
 
     out = []
     for i, row in df.iterrows():
@@ -77,12 +90,9 @@ def load_admet_candidates(csv_path: str, max_candidates: int = 12):
             "AMES": _safe_float(row.get(ames_col), 0.0) if ames_col else 0.0,
             "Caco2": _safe_float(row.get(caco2_col), 0.0) if caco2_col else 0.0,
             "QED": _safe_float(row.get(qed_col), desc.get("QED", 0.0)) if qed_col else desc.get("QED", 0.0),
-
-            # ——新增：可选字段（缺失时用 None，不参与决策）——
             "pKa": _safe_float(row.get(pka_col), None) if pka_col else None,
-            "logD74": _safe_float(row.get(logd_col), None) if logd_col else None,
-            "Tm": _safe_float(row.get(tm_col), None) if tm_col else None,
-            "Solubility": _safe_float(row.get(sol_col), None) if sol_col else None,
+            "logD74": _safe_float(row.get(logd74_col), None) if logd74_col else None,
+            "logD7": _safe_float(row.get(logd7_col), None) if logd7_col else None,
         }
 
         out.append({

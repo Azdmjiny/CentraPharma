@@ -1,9 +1,18 @@
 import os
 import math
 import json
+from typing import Optional, Sequence
 
-from openmm.app import PDBFile, Simulation
-from openmm import System, CustomNonbondedForce, VerletIntegrator, Platform, Vec3
+from openmm.app import (
+    PDBFile,
+    Simulation,
+    PME,
+    NoCutoff,
+    HBonds,
+    AmberPrmtopFile,
+    AmberInpcrdFile,
+)
+from openmm import Platform, XmlSerializer, LangevinMiddleIntegrator
 from openmm import unit
 
 
@@ -33,11 +42,37 @@ def _norm3(a, b):
     dz = a[2] - b[2]
     return math.sqrt(dx * dx + dy * dy + dz * dz)
 
+
 def _mean_value(values):
     vals = [float(v) for v in values]
     if not vals:
         return None
     return float(sum(vals) / len(vals))
+
+
+def _pick_platform(preferred: Optional[Sequence[str]] = None):
+    if preferred is None:
+        preferred = ["CPU", "CUDA", "OpenCL"]
+
+    available = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
+
+    errors = {}
+
+    for name in preferred:
+        if name not in available:
+            continue
+
+        try:
+            platform = Platform.getPlatformByName(name)
+            properties = {}
+            if name in ("CUDA", "OpenCL"):
+                properties["Precision"] = "mixed"
+            return platform, properties, available
+        except Exception as e:
+            errors[name] = str(e)
+            continue
+
+    raise RuntimeError(f"没有可用的平台。可用平台: {available}；尝试失败信息: {errors}")
 def compute_packaging_metrics(
     pdb_path: str,
     core_radius_A: float = 125.0,
@@ -45,35 +80,28 @@ def compute_packaging_metrics(
     atoms_per_drug: int = 57,
 ):
     """
-    计算 4 个简单但有用的包装指标：
-    1. 装入率 f_in
-    2. 最小边界余量 delta_min_A
-    3. 药物质心半径分布 drug_radius_A
-    4. 药物最近邻距离 drug_nn_dist_A
-
-    约定（按你当前体系）：
+    计算几个简单包装指标。
+    注意：这个函数仍然沿用你旧版的假设：
     - 药物链是 D
     - 每个药物 57 个原子
     - 核心半径 125 Å
+
+    后面如果你切到真正动态组装，这几个参数最好不要再写死。
     """
 
     pdb = PDBFile(pdb_path)
     atoms = list(pdb.topology.atoms())
 
-    # 全体系坐标（Å）
     all_positions_A = [_vec3_to_A(p) for p in pdb.positions]
     nanoparticle_center = _mean_xyz(all_positions_A)
 
-    # 取药物链原子
     drug_positions_A = []
     for atom, pos in zip(atoms, all_positions_A):
         if atom.residue.chain.id == drug_chain_id:
             drug_positions_A.append(pos)
 
     if not drug_positions_A:
-        raise RuntimeError(
-            f"在 PDB 中没有找到药物链 '{drug_chain_id}'，无法计算包装指标。"
-        )
+        raise RuntimeError(f"在 PDB 中没有找到药物链 '{drug_chain_id}'，无法计算包装指标。")
 
     if len(drug_positions_A) % atoms_per_drug != 0:
         raise RuntimeError(
@@ -87,34 +115,23 @@ def compute_packaging_metrics(
     boundary_margins = []
     inside_count = 0
 
-    # 逐个药物切块
     for i in range(n_drugs):
         block = drug_positions_A[i * atoms_per_drug:(i + 1) * atoms_per_drug]
 
-        # 药物质心
         c = _mean_xyz(block)
         drug_centers.append(c)
 
-        # 该药物最外层原子到纳米颗粒中心的最大半径
         r_max = max(_norm3(p, nanoparticle_center) for p in block)
-
-        # 边界余量 Δ_i = R_core - r_max
         delta_i = float(core_radius_A - r_max)
         boundary_margins.append(delta_i)
 
         if delta_i > 0.0:
             inside_count += 1
 
-    # 1) 装入率
     f_in = float(inside_count / n_drugs)
-
-    # 2) 最小边界余量
     delta_min_A = float(min(boundary_margins))
-
-    # 3) 药物质心半径分布
     drug_radius_A = [float(_norm3(c, nanoparticle_center)) for c in drug_centers]
 
-    # 4) 药物最近邻距离
     drug_nn_dist_A = []
     for i, ci in enumerate(drug_centers):
         dmin = None
@@ -127,6 +144,7 @@ def compute_packaging_metrics(
         drug_nn_dist_A.append(float(dmin if dmin is not None else 0.0))
 
     return {
+        "f_in": f_in,
         "delta_min_A": delta_min_A,
         "drug_radius_mean_A": _mean_value(drug_radius_A),
         "drug_nn_dist_mean_A": _mean_value(drug_nn_dist_A),
@@ -134,128 +152,169 @@ def compute_packaging_metrics(
 
 
 def run_openmm_minimization(
-    input_pdb: str,
     output_pdb: str,
-    max_iterations: int = 2000,
-    repulsion_k: float = 10.0,     # kJ/mol/nm^2
-    sigma_nm: float = 0.25,        # nm
-    cutoff_nm: float = 1.0,        # nm
-    platform_name: str = "CPU",
-    stages: int = 3,
+    prmtop_path: str,
+    inpcrd_path: str,
+    state_xml_path: Optional[str] = None,
+    summary_json_path: Optional[str] = None,
+    max_iterations: int = 5000,
+    nonbonded_cutoff_nm: float = 1.0,
+    constraints: str = "HBonds",
+    temperature_K: float = 300.0,
+    friction_per_ps: float = 1.0,
+    timestep_fs: float = 2.0,
+    platform_preference: Optional[Sequence[str]] = None,
     verbose: bool = False,
 ):
     """
-    用 OpenMM 做“软排斥”规整（处理 PACKMOL 的近距离碰撞）：
-    - 不依赖力场（不需要 forcefield 文件）
-    - 只做软排斥：step(sigma-r) * k * (sigma-r)^2
-    - 分阶段增大 k / 缩小 sigma，让体系更稳更不容易炸
+    真实 OpenMM 能量最小化入口。
 
-    单位约定（OpenMM 的默认 nm / kJ/mol 体系）：
-    - repulsion_k：k（kJ/mol/nm^2）
-    - sigma_nm：sigma（nm）
-    - cutoff_nm：cutoff（nm）
+    需要 AmberTools 先生成：
+    - prmtop
+    - inpcrd
+
+    参数说明：
+    - output_pdb: 最小化后输出的 PDB
+    - prmtop_path: Amber 拓扑文件
+    - inpcrd_path: Amber 坐标文件
+    - state_xml_path: 可选，保存 OpenMM state.xml
+    - summary_json_path: 可选，保存最小化摘要 JSON
+    - max_iterations: 最大最小化步数
     """
 
+    if not prmtop_path or not os.path.exists(prmtop_path):
+        raise FileNotFoundError(f"找不到 prmtop 文件: {prmtop_path}")
+    if not inpcrd_path or not os.path.exists(inpcrd_path):
+        raise FileNotFoundError(f"找不到 inpcrd 文件: {inpcrd_path}")
+
     _ensure_dir(output_pdb)
+    if state_xml_path:
+        _ensure_dir(state_xml_path)
+    if summary_json_path:
+        _ensure_dir(summary_json_path)
 
-    pdb = PDBFile(input_pdb)
-    topology = pdb.topology
-    positions = pdb.positions
+    prmtop = AmberPrmtopFile(prmtop_path)
+    inpcrd = AmberInpcrdFile(inpcrd_path)
 
-    atoms = list(topology.atoms())
-    n_atoms = len(atoms)
+    constraint_map = {
+        "HBonds": HBonds,
+        "h-bonds": HBonds,
+        "hbonds": HBonds,
+        None: HBonds,
+    }
+    constraint_mode = constraint_map.get(constraints, HBonds)
+
+    box_vectors = inpcrd.boxVectors
+    if box_vectors is None:
+        try:
+            box_vectors = prmtop.topology.getPeriodicBoxVectors()
+        except Exception:
+            box_vectors = None
+
+    is_periodic = box_vectors is not None
+    nonbonded_method = PME if is_periodic else NoCutoff
+
+    system = prmtop.createSystem(
+        nonbondedMethod=nonbonded_method,
+        nonbondedCutoff=float(nonbonded_cutoff_nm) * unit.nanometer,
+        constraints=constraint_mode,
+    )
+
+    integrator = LangevinMiddleIntegrator(
+        float(temperature_K) * unit.kelvin,
+        float(friction_per_ps) / unit.picosecond,
+        float(timestep_fs) * unit.femtoseconds,
+    )
+
+    platform, properties, available_platforms = _pick_platform(platform_preference)
 
     if verbose:
-        print(f"[OPENMM] start minimization: N_atoms={n_atoms}, max_iter={max_iterations}, cutoff_nm={cutoff_nm}")
-    # -----------------------------
-    # system: 只加粒子质量即可（不跑动力学，只做最小化）
-    # -----------------------------
-    system = System()
-    for _ in atoms:
-        system.addParticle(12.0)  # dalton(amu)，任意正数都可
-
-    # -----------------------------
-    # Soft repulsion
-    # -----------------------------
-    energy = "step(sigma - r) * k * (sigma - r)^2"
-    force = CustomNonbondedForce(energy)
-    force.addGlobalParameter("k", float(repulsion_k))
-    force.addGlobalParameter("sigma", float(sigma_nm))
-
-    force.setNonbondedMethod(CustomNonbondedForce.CutoffNonPeriodic)
-    force.setCutoffDistance(float(cutoff_nm) * unit.nanometer)
-
-    for _ in range(n_atoms):
-        force.addParticle([])
-
-    system.addForce(force)
-
-    integrator = VerletIntegrator(0.001 * unit.picoseconds)
+        print(f"[OPENMM] prmtop={prmtop_path}")
+        print(f"[OPENMM] inpcrd={inpcrd_path}")
+        print(f"[OPENMM] preferred platform={platform.getName()}")
+        print(f"[OPENMM] available={available_platforms}")
+        print(f"[OPENMM] periodic={is_periodic}")
+        print(f"[OPENMM] nonbondedMethod={'PME' if is_periodic else 'NoCutoff'}")
+        print(f"[OPENMM] max_iterations={max_iterations}")
 
     try:
-        platform = Platform.getPlatformByName(platform_name)
+        simulation = Simulation(prmtop.topology, system, integrator, platform, properties)
+        simulation.context.setPositions(inpcrd.positions)
+        if box_vectors is not None:
+            simulation.context.setPeriodicBoxVectors(*box_vectors)
     except Exception as e:
-        names = [Platform.getPlatform(i).getName() for i in range(Platform.getNumPlatforms())]
-        raise RuntimeError(
-            f"Platform '{platform_name}' not available. Available platforms: {names}. Original error: {e}"
-        )
-
-    properties = {}
-    if platform.getName() in ("CUDA", "OpenCL"):
-        properties["Precision"] = "mixed"
-
-    simulation = Simulation(topology, system, integrator, platform, properties)
-
-    import random
-
-    if hasattr(positions, "value_in_unit"):
-        positions_nm = positions.value_in_unit(unit.nanometer)
-    else:
-        positions_nm = positions
-
-    jitter_nm = 0.01
-    pos_jitter_nm = []
-    for p in positions_nm:
-        dx = random.uniform(-1.0, 1.0) * jitter_nm
-        dy = random.uniform(-1.0, 1.0) * jitter_nm
-        dz = random.uniform(-1.0, 1.0) * jitter_nm
-        pos_jitter_nm.append(Vec3(p.x + dx, p.y + dy, p.z + dz))
-
-    pos_jitter = [v * unit.nanometer for v in pos_jitter_nm]
-    simulation.context.setPositions(pos_jitter)
-
-    if stages < 1:
-        stages = 1
-
-    sigma_start = sigma_nm * 1.8
-    k_start = repulsion_k * 0.2
-
-    for s in range(stages):
-        if stages == 1:
-            sigma_s = sigma_nm
-            k_s = repulsion_k
-            it_s = max_iterations
+        if platform.getName() != "CPU" and "CPU" in available_platforms:
+            fallback_from = platform.getName()
+            fallback_error = repr(e)
+            cpu_platform = Platform.getPlatformByName("CPU")
+            simulation = Simulation(prmtop.topology, system, integrator, cpu_platform, {})
+            simulation.context.setPositions(inpcrd.positions)
+            if box_vectors is not None:
+                simulation.context.setPeriodicBoxVectors(*box_vectors)
+            platform = cpu_platform
+            properties = {}
         else:
-            t = s / (stages - 1)
-            sigma_s = sigma_start * (1.0 - t) + sigma_nm * t
-            k_s = k_start * (1.0 - t) + repulsion_k * t
-            it_s = max(200, int(max_iterations / stages))
+            raise
+    state_before = simulation.context.getState(getEnergy=True)
+    e_before = state_before.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
 
-        simulation.context.setParameter("sigma", float(sigma_s))
-        simulation.context.setParameter("k", float(k_s))
+    simulation.minimizeEnergy(maxIterations=int(max_iterations))
 
-        if verbose:
-            print(f"[OPENMM] stage {s + 1}/{stages}: sigma_nm={sigma_s:.4f}, k={k_s:.4f}, it={it_s}")
-        simulation.minimizeEnergy(
-            tolerance=10.0 * unit.kilojoule / (unit.mole * unit.nanometer),
-            maxIterations=int(it_s)
-        )
-
-    state = simulation.context.getState(getPositions=True)
+    state_after = simulation.context.getState(getEnergy=True, getPositions=True)
+    e_after = state_after.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
 
     with open(output_pdb, "w", encoding="utf-8") as f:
-        PDBFile.writeFile(topology, state.getPositions(), f)
+        PDBFile.writeFile(prmtop.topology, state_after.getPositions(), f)
 
-    print("[OPENMM] minimization done")
-    print("[OPENMM] saved:", output_pdb)
-    return output_pdb
+    if state_xml_path:
+        with open(state_xml_path, "w", encoding="utf-8") as f:
+            f.write(XmlSerializer.serialize(state_after))
+
+    summary = {
+        "mode": "openmm_amber_minimize",
+        "success": True,
+        "platform": platform.getName(),
+        "available_platforms": available_platforms,
+        "prmtop_path": os.path.abspath(prmtop_path),
+        "inpcrd_path": os.path.abspath(inpcrd_path),
+        "output_pdb": os.path.abspath(output_pdb),
+        "state_xml_path": os.path.abspath(state_xml_path) if state_xml_path else None,
+        "max_iterations": int(max_iterations),
+        "nonbonded_cutoff_nm": float(nonbonded_cutoff_nm),
+        "periodic": bool(is_periodic),
+        "nonbonded_method": "PME" if is_periodic else "NoCutoff",
+        "constraints": str(constraints),
+        "temperature_K": float(temperature_K),
+        "friction_per_ps": float(friction_per_ps),
+        "timestep_fs": float(timestep_fs),
+        "energy_before_kj_per_mol": float(e_before),
+        "energy_after_kj_per_mol": float(e_after),
+        "energy_drop_kj_per_mol": float(e_before - e_after),
+    }
+    summary["fallback_from"] = fallback_from
+    summary["fallback_error"] = fallback_error
+
+    if summary_json_path:
+        with open(summary_json_path, "w", encoding="utf-8") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=2)
+
+    if verbose:
+        print("[OPENMM] minimization done")
+        print(f"[OPENMM] energy before = {e_before:.6f} kJ/mol")
+        print(f"[OPENMM] energy after  = {e_after:.6f} kJ/mol")
+        print(f"[OPENMM] saved pdb     = {output_pdb}")
+        if state_xml_path:
+            print(f"[OPENMM] saved xml     = {state_xml_path}")
+        if summary_json_path:
+            print(f"[OPENMM] saved summary = {summary_json_path}")
+
+    return {
+        "output_pdb": output_pdb,
+        "state_xml_path": state_xml_path,
+        "summary_json_path": summary_json_path,
+        "energy_before_kj_per_mol": float(e_before),
+        "energy_after_kj_per_mol": float(e_after),
+        "energy_drop_kj_per_mol": float(e_before - e_after),
+        "platform": platform.getName(),
+        "mode": "openmm_amber_minimize",
+    }

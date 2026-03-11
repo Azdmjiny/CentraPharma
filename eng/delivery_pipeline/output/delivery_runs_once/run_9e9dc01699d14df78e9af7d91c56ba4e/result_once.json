@@ -1,0 +1,217 @@
+[
+  {
+    "category": "drug_delivery_design",
+    "smiles": "N[C@@]1([C@H]2[C@@H](C[C@H]1OCc1ccc(Cl)c(Cl)c1)[C@]2(F)C(O)=O)C(O)=O",
+    "drug_properties": {
+      "MW": 378.1830000000001,
+      "logP": 2.1032999999999995,
+      "tPSA": 109.85000000000002,
+      "HBA": 4.0,
+      "HBD": 3.0,
+      "RotB": 5.0,
+      "QED": 0.7240865596954217,
+      "BBB": 0.0,
+      "hERG": 0.1902646027505397,
+      "AMES": 0.1329736143350601,
+      "Caco2": 0.0,
+      "pKa": 3.190377645492554,
+      "logD74": -1.6659923347062078,
+      "Tm": null,
+      "Solubility": null
+    },
+    "delivery_system": {
+      "type": "liposome",
+      "material": "LIPOSOME",
+      "targeting_ligand": null,
+      "size_nm": 90.0,
+      "zeta_mv": -5.0,
+      "drug_loading": 0.12,
+      "packmol_ok": true,
+      "packmol_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/system_packmol.pdb",
+      "openmm_min_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/system_openmm_min_real.pdb",
+      "manifest_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/agent_manifest.json"
+    },
+    "md_metrics": {
+      "mode": "openmm_amber_minimize",
+      "openmm_min_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/system_openmm_min_real.pdb",
+      "stability_index": 0.6138411419923693,
+      "energy_relaxation": {
+        "drop_per_atom_kj_per_mol": 26072947.158207577
+      },
+      "geometry_check": {
+        "all_atom_rmsd_A": 2.5450674847719155
+      },
+      "packaging_check": {
+        "drug_localization_mean_before_A": 12.464414106427116,
+        "drug_localization_mean_after_A": 12.298881338724199,
+        "drug_localization_shift_A": -0.16553276770291703
+      },
+      "details": {
+        "platform": "CPU",
+        "periodic": null,
+        "nonbonded_method": null,
+        "output_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/system_openmm_min_real.pdb",
+        "state_xml_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/state.xml",
+        "summary_json_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/reports/md_metrics_real.json"
+      }
+    },
+    "bbb_strategy": {
+      "method": "none",
+      "ligand": null
+    },
+    "advantages": [
+      "结构参数接近最优窗口",
+      "已完成PACKMOL体系构建",
+      "已完成真实最小化与指标计算(openmm_amber_minimize)，稳定性指标=0.614"
+    ],
+    "score": {
+      "total": 0.6321356785672528,
+      "breakdown": {
+        "S_material": 0.4019155999999998,
+        "S_structure": 0.8499999999999999,
+        "S_md": 0.6138411419923693,
+        "S_qed": 0.7240865596954217
+      }
+    },
+    "best_design_id": "CAND_0003_D001",
+    "candidate_id": "CAND_0003"
+  },
+  {
+    "category": "drug_delivery_design",
+    "smiles": "Cc1ccc(NC(=O)C(O)=O)cc1",
+    "drug_properties": {
+      "MW": 179.175,
+      "logP": 1.01812,
+      "tPSA": 66.4,
+      "HBA": 2.0,
+      "HBD": 2.0,
+      "RotB": 1.0,
+      "QED": 0.6322455489228952,
+      "BBB": 0.0,
+      "hERG": 0.0055112161906436,
+      "AMES": 0.0708222955465316,
+      "Caco2": 0.0,
+      "pKa": 5.158897212346395,
+      "logD74": 0.1800286527930132,
+      "Tm": null,
+      "Solubility": null
+    },
+    "delivery_system": {
+      "type": "liposome",
+      "material": "LIPOSOME",
+      "targeting_ligand": null,
+      "size_nm": 90.0,
+      "zeta_mv": -5.0,
+      "drug_loading": 0.12,
+      "packmol_ok": true,
+      "packmol_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/system_packmol.pdb",
+      "openmm_min_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/openmm/system_openmm_min_real.pdb",
+      "manifest_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/agent_manifest.json"
+    },
+    "md_metrics": {
+      "mode": "openmm_amber_minimize",
+      "openmm_min_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/openmm/system_openmm_min_real.pdb",
+      "stability_index": 0.6058823102650026,
+      "energy_relaxation": {
+        "drop_per_atom_kj_per_mol": 26375541.199115507
+      },
+      "geometry_check": {
+        "all_atom_rmsd_A": 2.5643711559250733
+      },
+      "packaging_check": {
+        "drug_localization_mean_before_A": 22.93998342021187,
+        "drug_localization_mean_after_A": 22.654900043211587,
+        "drug_localization_shift_A": -0.28508337700028363
+      },
+      "details": {
+        "platform": "CPU",
+        "periodic": null,
+        "nonbonded_method": null,
+        "output_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/openmm/system_openmm_min_real.pdb",
+        "state_xml_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/openmm/state.xml",
+        "summary_json_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0001/D003/reports/md_metrics_real.json"
+      }
+    },
+    "bbb_strategy": {
+      "method": "none",
+      "ligand": null
+    },
+    "advantages": [
+      "结构参数整体较平衡",
+      "已完成PACKMOL体系构建",
+      "已完成真实最小化与指标计算(openmm_amber_minimize)，稳定性指标=0.606"
+    ],
+    "score": {
+      "total": 0.5604189546384569,
+      "breakdown": {
+        "S_material": 0.20143235555555555,
+        "S_structure": 0.8499999999999999,
+        "S_md": 0.6058823102650026,
+        "S_qed": 0.6322455489228952
+      }
+    },
+    "best_design_id": "CAND_0001_D003",
+    "candidate_id": "CAND_0001"
+  },
+  {
+    "category": "drug_delivery_design",
+    "smiles": "N[C@@]1([C@H]2[C@@H](C[C@H]1OCc1ccc(F)c(F)c1)[C@]2(F)C(O)=O)C(O)=O",
+    "drug_properties": {
+      "MW": 345.2730000000001,
+      "logP": 1.0746999999999995,
+      "tPSA": 109.85000000000002,
+      "HBA": 4.0,
+      "HBD": 3.0,
+      "RotB": 5.0,
+      "QED": 0.7364906454344495,
+      "BBB": 0.0,
+      "hERG": 0.1508099719882011,
+      "AMES": 0.2652592360973358,
+      "Caco2": 0.0,
+      "pKa": 3.231349560419719,
+      "logD74": -2.6529355635039877,
+      "Tm": null,
+      "Solubility": null
+    },
+    "delivery_system": {
+      "type": "liposome",
+      "material": "LIPOSOME",
+      "targeting_ligand": null,
+      "size_nm": 90.0,
+      "zeta_mv": -5.0,
+      "drug_loading": 0.12,
+      "packmol_ok": true,
+      "packmol_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0002/D001/system_packmol.pdb",
+      "openmm_min_pdb": null,
+      "manifest_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0002/D001/agent_manifest.json"
+    },
+    "md_metrics": {
+      "mode": "failed",
+      "openmm_min_pdb": null,
+      "stability_index": null,
+      "details": {
+        "error": "Particle coordinate is NaN.  For more information, see https://github.com/openmm/openmm/wiki/Frequently-Asked-Questions#nan"
+      }
+    },
+    "bbb_strategy": {
+      "method": "none",
+      "ligand": null
+    },
+    "advantages": [
+      "结构参数接近最优窗口",
+      "已完成PACKMOL体系构建",
+      "真实最小化未完成，已保留错误信息"
+    ],
+    "score": {
+      "total": 0.4716519845434449,
+      "breakdown": {
+        "S_material": 0.27667640000000004,
+        "S_structure": 0.8499999999999999,
+        "S_md": 0.2,
+        "S_qed": 0.7364906454344495
+      }
+    },
+    "best_design_id": "CAND_0002_D001",
+    "candidate_id": "CAND_0002"
+  }
+]

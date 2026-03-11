@@ -22,21 +22,23 @@ def _maybe_unzip_template_dir(template_dir: str | os.PathLike) -> str:
     p = Path(template_dir)
     if p.is_dir():
         return str(p)
-    zip_candidate = p.with_suffix('.zip')
+
+    zip_candidate = p.with_suffix(".zip")
     if zip_candidate.exists():
         p.mkdir(parents=True, exist_ok=True)
         import zipfile
-        with zipfile.ZipFile(zip_candidate, 'r') as zf:
+        with zipfile.ZipFile(zip_candidate, "r") as zf:
             zf.extractall(p)
         return str(p)
-    alt_zip = p.parent / 'template.zip'
+
+    alt_zip = p.parent / "template.zip"
     if alt_zip.exists() and not p.exists():
         p.mkdir(parents=True, exist_ok=True)
         import zipfile
-        with zipfile.ZipFile(alt_zip, 'r') as zf:
+        with zipfile.ZipFile(alt_zip, "r") as zf:
             zf.extractall(p)
-        # 兼容 zip 内部再套一层 template/
-        inner = p / 'template'
+
+        inner = p / "template"
         if inner.is_dir() and any(inner.iterdir()):
             for child in inner.iterdir():
                 target = p / child.name
@@ -47,6 +49,7 @@ def _maybe_unzip_template_dir(template_dir: str | os.PathLike) -> str:
             except Exception:
                 pass
         return str(p)
+
     return str(p)
 
 
@@ -57,10 +60,12 @@ def _candidate_component_dirs(component_dir: str | None = None) -> list[Path]:
         if not p.is_absolute():
             p = _eng_root() / p
         dirs.append(Path(_maybe_unzip_template_dir(p)))
+
     dirs.extend([
-        Path(_maybe_unzip_template_dir(_delivery_root() / 'template')),
-        Path(_maybe_unzip_template_dir(_eng_root() / 'LNP' / 'templates')),
+        Path(_maybe_unzip_template_dir(_delivery_root() / "template")),
+        Path(_maybe_unzip_template_dir(_eng_root() / "LNP" / "templates")),
     ])
+
     seen = []
     out = []
     for d in dirs:
@@ -75,33 +80,317 @@ def _resolve_component_dir(component_dir: str | None = None) -> str:
     for d in _candidate_component_dirs(component_dir):
         if d.is_dir():
             return str(d.resolve())
-    # 返回第一个候选，让后面报错信息更明确
     cand = _candidate_component_dirs(component_dir)
-    return str(cand[0]) if cand else str((_delivery_root() / 'template').resolve())
+    return str(cand[0]) if cand else str((_delivery_root() / "template").resolve())
 
 
 def _find_material_spec(material: str, component_dir: str | None = None):
     for d in _candidate_component_dirs(component_dir):
-        spec = d / f'{material}_packmol.json'
-        shell = d / f'{material}_shell.pdb'
+        spec = d / f"{material}_packmol.json"
+        shell = d / f"{material}_shell.pdb"
         if spec.exists() or shell.exists():
             return d, spec, shell
     d = Path(_resolve_component_dir(component_dir))
-    return d, d / f'{material}_packmol.json', d / f'{material}_shell.pdb'
+    return d, d / f"{material}_packmol.json", d / f"{material}_shell.pdb"
 
 
 def _ensure_dir(p: str):
     os.makedirs(p, exist_ok=True)
 
 
-def _smiles_to_pdb(smiles: str, out_pdb: str):
+def _packmol_fmt3(value) -> str:
+    try:
+        return f"{float(value):.3f}"
+    except Exception:
+        return str(value)
+
+
+def _extract_packmol_numeric(line: str):
+    import re
+    m = re.search(r'([-+]?\d*\.?\d+(?:[Ee][-+]?\d+)?)\s*$', line.strip())
+    if not m:
+        return None
+    try:
+        return float(m.group(1))
+    except Exception:
+        return None
+
+
+def _packmol_compact_message(line: str) -> str | None:
+    s = line.strip()
+
+    if "Success!" in s:
+        return "[PACKMOL] Success"
+
+    if "Final objective function value" in s:
+        v = _extract_packmol_numeric(s)
+        return f"[PACKMOL] Final objective function value: {_packmol_fmt3(v)}" if v is not None else None
+
+    if "Maximum violation of target distance" in s:
+        v = _extract_packmol_numeric(s)
+        if "Final" in s:
+            return f"[PACKMOL] Final max target-distance violation: {_packmol_fmt3(v)}" if v is not None else None
+        return None
+
+    if "Maximum violation of the constraints" in s:
+        v = _extract_packmol_numeric(s)
+        if "Final" in s:
+            return f"[PACKMOL] Final max constraint violation: {_packmol_fmt3(v)}" if v is not None else None
+        return None
+
+    return None
+
+
+COMPONENT_RESNAME_MAP = {
+    "PLGA50_50_20mer.pdb": "PLG",
+    "PEG5k_ligand_stub.pdb": "PEG",
+    "CHOL.pdb": "CHL",
+    "COMPRITOL888ATO.pdb": "COM",
+    "DMG_PEG2000.pdb": "DPG",
+    "DSPC.pdb": "DSP",
+    "DSPE_PEG2000.pdb": "DSG",
+    "HSPC.pdb": "HSP",
+    "MC3.pdb": "MC3",
+    "MIGLYOL812.pdb": "MIG",
+    "TWEEN80.pdb": "TWE",
+    "drug_template.pdb": "DRG",
+    "drug.pdb": "DRG",
+}
+
+
+def _force_pdb_resname(input_pdb: str, output_pdb: str, residue_name: str):
+    residue_name = (residue_name or "UNK")[:3]
+    with open(input_pdb, "r", encoding="utf-8", errors="ignore") as fin, open(
+        output_pdb, "w", encoding="utf-8"
+    ) as fout:
+        for line in fin:
+            if line.startswith(("ATOM  ", "HETATM")) and len(line) >= 26:
+                line = f"{line[:17]}{residue_name:>3}{line[20:]}"
+            fout.write(line)
+
+
+def _formal_charge_from_smiles(smiles: str) -> int:
+    mol = Chem.MolFromSmiles(smiles)
+    if mol is None:
+        return 0
+    return int(Chem.GetFormalCharge(mol))
+
+
+def _parse_mol2_atom_names(mol2_path: str) -> list[str]:
+    names = []
+    in_atom_block = False
+    with open(mol2_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            s = line.strip()
+            if s.upper().startswith("@<TRIPOS>ATOM"):
+                in_atom_block = True
+                continue
+            if s.upper().startswith("@<TRIPOS>BOND"):
+                break
+            if in_atom_block and s:
+                parts = s.split()
+                if len(parts) >= 2:
+                    names.append(parts[1][:4])
+    if not names:
+        raise ValueError(f"无法从 mol2 读取 atom names: {mol2_path}")
+    return names
+
+
+def _guess_element_from_mol2_type(atom_name: str, atom_type: str) -> str:
+    t = (atom_type or "").strip().lower()
+    a = (atom_name or "").strip()
+
+    if t.startswith("cl"):
+        return "Cl"
+    if t.startswith("br"):
+        return "Br"
+    if t.startswith("si"):
+        return "Si"
+    if t.startswith("na"):
+        return "Na"
+    if t.startswith("mg"):
+        return "Mg"
+    if t.startswith("zn"):
+        return "Zn"
+    if t.startswith("ca"):
+        return "C"   # GAFF aromatic carbon
+
+    if t.startswith("c"):
+        return "C"
+    if t.startswith("n"):
+        return "N"
+    if t.startswith("o"):
+        return "O"
+    if t.startswith("s"):
+        return "S"
+    if t.startswith("p"):
+        return "P"
+    if t.startswith("h"):
+        return "H"
+    if t.startswith("f"):
+        return "F"
+    if t.startswith("i"):
+        return "I"
+
+    letters = "".join(ch for ch in a if ch.isalpha())
+    if not letters:
+        return "C"
+
+    letters_low = letters.lower()
+    if letters_low.startswith("cl"):
+        return "Cl"
+    if letters_low.startswith("br"):
+        return "Br"
+    return letters[0].upper()
+
+
+def _read_mol2_atoms(mol2_path: str) -> list[dict]:
+    atoms = []
+    in_atom_block = False
+
+    with open(mol2_path, "r", encoding="utf-8", errors="ignore") as f:
+        for line in f:
+            s = line.strip()
+            if s.upper().startswith("@<TRIPOS>ATOM"):
+                in_atom_block = True
+                continue
+            if s.upper().startswith("@<TRIPOS>BOND"):
+                break
+            if in_atom_block and s:
+                parts = s.split()
+                if len(parts) < 6:
+                    continue
+
+                atom_id = int(parts[0])
+                atom_name = parts[1]
+                x = float(parts[2])
+                y = float(parts[3])
+                z = float(parts[4])
+                atom_type = parts[5]
+
+                atoms.append({
+                    "atom_id": atom_id,
+                    "atom_name": atom_name[:4],
+                    "x": x,
+                    "y": y,
+                    "z": z,
+                    "atom_type": atom_type,
+                    "element": _guess_element_from_mol2_type(atom_name, atom_type),
+                })
+
+    if not atoms:
+        raise ValueError(f"无法从 mol2 读取原子坐标: {mol2_path}")
+
+    return atoms
+
+
+def _write_pdb_from_mol2_with_same_atom_names(mol2_path: str, out_pdb: str, residue_name: str = "DRG"):
+    atoms = _read_mol2_atoms(mol2_path)
+    residue_name = (residue_name or "DRG")[:3]
+
+    lines = []
+    for i, atom in enumerate(atoms, start=1):
+        atom_name = atom["atom_name"][:4]
+        element = atom["element"][:2]
+        x = atom["x"]
+        y = atom["y"]
+        z = atom["z"]
+
+        line = (
+            f"HETATM{i:5d} "
+            f"{atom_name:>4} "
+            f"{residue_name:>3} D"
+            f"{1:4d}    "
+            f"{x:8.3f}{y:8.3f}{z:8.3f}"
+            f"{1.00:6.2f}{0.00:6.2f}          "
+            f"{element:>2}"
+        )
+        lines.append(line + "\n")
+
+    lines.append("END\n")
+
+    with open(out_pdb, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+    return out_pdb
+
+
+def _write_drug_templates_for_packmol(
+    smiles: str,
+    out_sdf: str,
+    out_mol2: str,
+    out_pdb: str,
+    residue_name: str = "DRG",
+):
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         raise ValueError(f"无效SMILES: {smiles}")
+
     mol = Chem.AddHs(mol)
-    AllChem.EmbedMolecule(mol, AllChem.ETKDG())
-    AllChem.UFFOptimizeMolecule(mol, maxIters=300)
-    Chem.MolToPDBFile(mol, out_pdb)
+    params = AllChem.ETKDGv3()
+    params.randomSeed = 20250309
+    status = AllChem.EmbedMolecule(mol, params)
+    if status != 0:
+        raise RuntimeError("RDKit 3D 构象生成失败")
+
+    try:
+        AllChem.UFFOptimizeMolecule(mol, maxIters=1000)
+    except Exception:
+        pass
+
+    _ensure_dir(os.path.dirname(out_sdf) or ".")
+    writer = Chem.SDWriter(out_sdf)
+    writer.write(mol)
+    writer.close()
+
+    antechamber = shutil.which("antechamber")
+    if not antechamber:
+        raise FileNotFoundError("未找到 antechamber，无法预生成与 Amber 一致的 drug_template.mol2")
+
+    formal_charge = _formal_charge_from_smiles(smiles)
+    proc = subprocess.run(
+        [
+            antechamber,
+            "-i", out_sdf,
+            "-fi", "sdf",
+            "-o", out_mol2,
+            "-fo", "mol2",
+            "-c", "bcc",
+            "-nc", str(formal_charge),
+            "-at", "gaff2",
+            "-rn", residue_name[:3],
+            "-pf", "y",
+        ],
+        text=True,
+        capture_output=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            "antechamber 生成 drug_template.mol2 失败:\n"
+            f"STDOUT:\n{proc.stdout}\n\nSTDERR:\n{proc.stderr}"
+        )
+
+    _write_pdb_from_mol2_with_same_atom_names(out_mol2, out_pdb, residue_name=residue_name[:3])
+    return {
+        "drug_sdf": out_sdf,
+        "drug_mol2": out_mol2,
+        "drug_pdb": out_pdb,
+        "formal_charge": formal_charge,
+    }
+
+
+def _smiles_to_pdb(smiles: str, out_pdb: str):
+    out_dir = os.path.dirname(os.path.abspath(out_pdb))
+    base = os.path.splitext(os.path.basename(out_pdb))[0]
+    out_sdf = os.path.join(out_dir, f"{base}.sdf")
+    out_mol2 = os.path.join(out_dir, f"{base}.mol2")
+    _write_drug_templates_for_packmol(
+        smiles=smiles,
+        out_sdf=out_sdf,
+        out_mol2=out_mol2,
+        out_pdb=out_pdb,
+        residue_name="DRG",
+    )
     return out_pdb
 
 
@@ -136,7 +425,6 @@ def _extract_admet(candidate: dict, fallback_qed: float = 0.0) -> dict:
 
 def pick_material_and_strategy(descriptors: dict, admet: dict):
     import math
-    from pathlib import Path
 
     def _f(x, default=None):
         try:
@@ -376,8 +664,7 @@ def _packmol_atoms_block(atom_ids, region_line: str) -> list[str]:
     atom_ids = _normalize_atom_ids(atom_ids)
     if not atom_ids:
         return []
-    lines = ["  atoms " + " ".join(map(str, atom_ids)), f"    {region_line}", "  end atoms"]
-    return lines
+    return ["  atoms " + " ".join(map(str, atom_ids)), f"    {region_line}", "  end atoms"]
 
 
 def _build_advanced_packmol_input_from_spec(spec: dict, output_pdb: str, size_nm: float) -> str:
@@ -418,6 +705,7 @@ def _build_advanced_packmol_input_from_spec(spec: dict, output_pdb: str, size_nm
         count = int(comp.get("count", 0))
         if count <= 0:
             continue
+
         head_atoms = _normalize_atom_ids(comp.get("head_atom_ids", []))
         tail_atoms = _normalize_atom_ids(comp.get("tail_atom_ids", []))
         block = [f"structure {pdb_name}", f"  number {count}"]
@@ -485,10 +773,19 @@ def _prepare_advanced_components(spec: dict, component_dir: str, scratch: str):
         pdb_name = str(comp.get("pdb", "")).strip()
         if not pdb_name:
             continue
+
         src = os.path.join(component_dir, pdb_name)
         if not os.path.exists(src):
             raise FileNotFoundError(f"高级packmol缺少组分PDB: {src}")
-        _copy_to_scratch(src, scratch, rename_to=os.path.basename(pdb_name))
+
+        dst = os.path.join(scratch, os.path.basename(pdb_name))
+        forced_resname = COMPONENT_RESNAME_MAP.get(os.path.basename(pdb_name))
+
+        if forced_resname:
+            _force_pdb_resname(src, dst, forced_resname)
+        else:
+            shutil.copy2(src, dst)
+
         copied.append(os.path.basename(pdb_name))
     return copied
 
@@ -521,7 +818,7 @@ def run_packmol(design: dict, packmol_bin: str = "packmol", component_dir: str =
     orig_workdir = os.path.abspath(design["workdir"])
     os.makedirs(orig_workdir, exist_ok=True)
 
-    packmol_bin = (os.environ.get("PACKMOL_BIN", packmol_bin) or "packmol").strip().strip('\"')
+    packmol_bin = (os.environ.get("PACKMOL_BIN", packmol_bin) or "packmol").strip().strip('"')
     component_dir = _resolve_component_dir(component_dir)
 
     tmp_root = os.environ.get("TEMP") or os.environ.get("TMP") or "/tmp"
@@ -555,7 +852,34 @@ def run_packmol(design: dict, packmol_bin: str = "packmol", component_dir: str =
         except Exception as e:
             design["packmol_debug"]["component_dir_listing_error"] = repr(e)
 
-        _smiles_to_pdb(design["smiles"], drug_pdb_s)
+        drug_sdf_s = os.path.join(scratch, "drug.sdf")
+        drug_mol2_s = os.path.join(scratch, "drug_template.mol2")
+        drug_pdb_s = os.path.join(scratch, "drug.pdb")
+
+        drug_sdf_o = os.path.join(orig_workdir, "drug.sdf")
+        drug_mol2_o = os.path.join(orig_workdir, "drug_template.mol2")
+        drug_pdb_o = os.path.join(orig_workdir, "drug_template.pdb")
+
+        template_info = _write_drug_templates_for_packmol(
+            smiles=design["smiles"],
+            out_sdf=drug_sdf_s,
+            out_mol2=drug_mol2_s,
+            out_pdb=drug_pdb_s,
+            residue_name="DRG",
+        )
+
+        shutil.copy2(drug_sdf_s, drug_sdf_o)
+        shutil.copy2(drug_mol2_s, drug_mol2_o)
+        shutil.copy2(drug_pdb_s, drug_pdb_o)
+
+        design["drug_template_sdf"] = drug_sdf_o
+        design["drug_template_mol2"] = drug_mol2_o
+        design["drug_template_pdb"] = drug_pdb_o
+        design["packmol_debug"]["drug_template_info"] = template_info
+        design["packmol_debug"]["drug_template_sdf"] = drug_sdf_o
+        design["packmol_debug"]["drug_template_mol2"] = drug_mol2_o
+        design["packmol_debug"]["drug_template_pdb"] = drug_pdb_o
+
         material = str(design.get("material", "PLGA") or "PLGA").strip()
         design["packmol_debug"]["material_used"] = material
 
@@ -588,14 +912,9 @@ def run_packmol(design: dict, packmol_bin: str = "packmol", component_dir: str =
         design["packmol_debug"]["packmol_inp_saved_to"] = inp_file_o
         design["packmol_debug"]["inp_head"] = inp[:2000]
 
-        # =========================
-        # 关键修复：支持两类 PACKMOL_BIN
-        # 1) 绝对/相对路径，指向 exe / bat / cmd
-        # 2) 仅给一个命令名，例如 packmol，走 PATH
-        # =========================
         packmol_bin = str(packmol_bin).strip().strip('"').strip("'")
         resolved_packmol = packmol_bin
-        if os.path.sep in packmol_bin or ('/' in packmol_bin) or ('\\' in packmol_bin):
+        if os.path.sep in packmol_bin or ("/" in packmol_bin) or ("\\" in packmol_bin):
             if not os.path.exists(packmol_bin):
                 raise FileNotFoundError(f"PACKMOL_BIN 不存在: {packmol_bin}")
         else:
@@ -609,7 +928,6 @@ def run_packmol(design: dict, packmol_bin: str = "packmol", component_dir: str =
             cmd_to_run = [resolved_packmol]
 
         design["packmol_debug"]["resolved_packmol"] = resolved_packmol
-
         design["packmol_debug"]["cmd_to_run"] = cmd_to_run
 
         timeout_sec = int(os.environ.get("PACKMOL_TIMEOUT_SEC", "1800"))
@@ -642,7 +960,12 @@ def run_packmol(design: dict, packmol_bin: str = "packmol", component_dir: str =
                     last_line_ts = time.time()
                     flog.write(line)
                     flog.flush()
-                    print("[PACKMOL]", line.rstrip())
+
+                    compact = _packmol_compact_message(line)
+                    if compact:
+                        print(compact)
+                    elif "ERROR" in line:
+                        print("[PACKMOL]", line.rstrip())
                 else:
                     if proc.poll() is not None:
                         break

@@ -1,0 +1,35 @@
+{
+  "category": "drug_delivery_design",
+  "smiles": "N[C@@]1([C@H]2[C@@H](C[C@H]1OCc1ccc(Cl)c(Cl)c1)[C@]2(F)C(O)=O)C(O)=O",
+  "drug_properties": {
+    "MW": 378.1830000000001,
+    "logP": 2.1032999999999995,
+    "tPSA": 109.85000000000002,
+    "HBA": 4.0,
+    "HBD": 3.0,
+    "RotB": 5.0,
+    "QED": 0.7240865596954217,
+    "BBB": 0.0,
+    "hERG": 0.1902646027505397,
+    "AMES": 0.1329736143350601,
+    "Caco2": 0.0,
+    "pKa": 3.190377645492554,
+    "logD74": -1.6659923347062078,
+    "Tm": null,
+    "Solubility": null
+  },
+  "delivery_system": {
+    "type": "liposome",
+    "material": "LIPOSOME",
+    "targeting_ligand": null,
+    "size_nm": 90.0,
+    "zeta_mv": -5.0,
+    "drug_loading": 0.12,
+    "packmol_ok": true,
+    "packmol_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D004/system_packmol.pdb",
+    "openmm_min_pdb": null
+  },
+  "md_metrics": {},
+  "best_design_id": "CAND_0003_D004",
+  "candidate_id": "CAND_0003"
+}

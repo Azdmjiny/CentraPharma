@@ -1,123 +1,172 @@
 import json
 import os
 
-
-def _ensure_dir(p: str):
-    d = os.path.dirname(os.path.abspath(p))
-    if d:
-        os.makedirs(d, exist_ok=True)
+from .openmm_minimizer import run_openmm_minimization
 
 
-def _write_metrics(path: str, metrics: dict):
-    _ensure_dir(path)
+def _ensure_parent_dir(path: str):
+    parent = os.path.dirname(os.path.abspath(path))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+
+
+def _write_json(path: str, obj: dict):
+    _ensure_parent_dir(path)
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(metrics, f, ensure_ascii=False, indent=2)
+        json.dump(obj, f, ensure_ascii=False, indent=2)
 
 
-def _packaging_to_stability(packaging_metrics: dict | None):
-    if not isinstance(packaging_metrics, dict):
-        return None
+def _load_json(path: str) -> dict:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def _safe_get(d: dict, *keys, default=None):
+    cur = d
+    for k in keys:
+        if not isinstance(cur, dict):
+            return default
+        cur = cur.get(k)
+        if cur is None:
+            return default
+    return cur
+
+
+def run_md_validation_from_manifest(
+    manifest_path: str,
+    candidate_index: int = 0,
+    max_iterations: int = 5000,
+):
+    """
+    新版真实最小化入口：
+    - 读取 agent_manifest.json
+    - 找到 amber 输出的 prmtop / inpcrd
+    - 调用真实 OpenMM 最小化
+    - 写回 metrics_json
+
+    返回结构保持尽量兼容旧 pipeline：
+    {
+        "mode": "openmm_amber_minimize",
+        "openmm_min_pdb": "...",
+        "stability_index": None,
+        "details": {...}
+    }
+    """
+    if not os.path.exists(manifest_path):
+        raise FileNotFoundError(f"manifest 不存在: {manifest_path}")
+
+    manifest = _load_json(manifest_path)
+    candidates = manifest.get("candidates", [])
+
+    if not isinstance(candidates, list) or len(candidates) == 0:
+        raise ValueError("manifest 中没有 candidates")
+
+    if candidate_index < 0 or candidate_index >= len(candidates):
+        raise IndexError(
+            f"candidate_index 越界: {candidate_index}, candidates 数量={len(candidates)}"
+        )
+
+    item = candidates[candidate_index]
+
+    prmtop_path = _safe_get(item, "outputs", "amber", "system_prmtop")
+    inpcrd_path = _safe_get(item, "outputs", "amber", "system_inpcrd")
+    output_pdb = _safe_get(item, "outputs", "openmm", "minimized_pdb")
+    state_xml = _safe_get(item, "outputs", "openmm", "state_xml")
+    metrics_json = _safe_get(item, "outputs", "analysis", "metrics_json")
+
+    if not prmtop_path:
+        raise ValueError("manifest 缺少 outputs.amber.system_prmtop")
+    if not inpcrd_path:
+        raise ValueError("manifest 缺少 outputs.amber.system_inpcrd")
+    if not output_pdb:
+        raise ValueError("manifest 缺少 outputs.openmm.minimized_pdb")
+    if not state_xml:
+        raise ValueError("manifest 缺少 outputs.openmm.state_xml")
+    if not metrics_json:
+        raise ValueError("manifest 缺少 outputs.analysis.metrics_json")
+
     try:
-        delta_min = packaging_metrics.get("delta_min_A", None)
-        nn_mean = packaging_metrics.get("drug_nn_dist_mean_A", None)
-        radius_mean = packaging_metrics.get("drug_radius_mean_A", None)
+        result = run_openmm_minimization(
+            prmtop_path=prmtop_path,
+            inpcrd_path=inpcrd_path,
+            output_pdb=output_pdb,
+            state_xml_path=state_xml,
+            summary_json_path=metrics_json,
+            max_iterations=max_iterations,
+        )
 
-        score = 0.5
-        if delta_min is not None:
-            score += max(-0.4, min(0.3, float(delta_min) / 50.0))
-        if nn_mean is not None:
-            score += max(-0.2, min(0.2, (float(nn_mean) - 3.0) / 20.0))
-        if radius_mean is not None:
-            score += max(-0.1, min(0.1, 1.0 - abs(float(radius_mean) - 80.0) / 120.0))
-        return max(0.0, min(1.0, float(score)))
-    except Exception:
-        return None
+        md_metrics = {
+            "mode": "openmm_amber_minimize",
+            "openmm_min_pdb": output_pdb,
+            "stability_index": None,
+            "details": result,
+        }
+
+        # 为了让 pipeline 读取时统一，这里把兼容结构覆盖写回 metrics_json
+        _write_json(metrics_json, md_metrics)
+        return md_metrics
+
+    except Exception as e:
+        md_metrics = {
+            "mode": "failed",
+            "openmm_min_pdb": None,
+            "stability_index": None,
+            "details": {
+                "error": str(e),
+                "manifest_path": os.path.abspath(manifest_path),
+                "prmtop_path": os.path.abspath(prmtop_path) if prmtop_path else None,
+                "inpcrd_path": os.path.abspath(inpcrd_path) if inpcrd_path else None,
+            },
+        }
+        _write_json(metrics_json, md_metrics)
+        return md_metrics
 
 
 def run_md_validation(
     design: dict,
-    enable_openmm: bool = True,
     analysis_json_name: str = "md_metrics.json",
-    openmm_repulsion_k: float = 10.0,
-    openmm_sigma_nm: float = 0.25,
-    openmm_radial_k: float = 0.0,
-    openmm_max_iterations: int = 2000,
-    openmm_tolerance_kj_mol_nm: float = 10.0,
+    openmm_max_iterations: int = 5000,
+    **kwargs,
 ):
-    packmol_pdb = design.get("packmol_pdb")
-    work_dir = design.get("work_dir") or design.get("out_dir") or design.get("output_dir") or design.get("workdir")
-    if not work_dir and packmol_pdb:
-        work_dir = os.path.dirname(os.path.abspath(packmol_pdb))
-    if not work_dir:
-        work_dir = "."
+    """
+    兼容旧 pipeline 的包装器。
+    现在要求 design 里提供 manifest_path 或 agent_manifest 路径。
 
-    md_metrics_path = os.path.join(work_dir, analysis_json_name)
-    md_metrics = {
-        "mode": "openmm",
-        "openmm_min_pdb": None,
-        "stability_index": None,
-        "details": {},
+    design 至少应包含：
+    {
+        "manifest_path": ".../agent_manifest.json"
     }
 
-    if not packmol_pdb or (not os.path.exists(packmol_pdb)):
-        md_metrics["mode"] = "failed"
-        md_metrics["details"]["error"] = f"packmol_pdb not found: {packmol_pdb}"
-        _write_metrics(md_metrics_path, md_metrics)
-        design["md_metrics"] = md_metrics
-        return design
+    如果你的 pipeline 还没改完，只调用旧的 packmol_pdb，
+    那这里会明确报错，而不是偷偷走旧软排斥逻辑。
+    """
+    manifest_path = (
+        design.get("manifest_path")
+        or design.get("agent_manifest")
+        or design.get("agent_manifest_path")
+    )
 
-    if not enable_openmm:
-        md_metrics["mode"] = "skipped"
-        md_metrics["details"]["reason"] = "enable_openmm=False"
-        _write_metrics(md_metrics_path, md_metrics)
-        design["md_metrics"] = md_metrics
-        return design
-
-    try:
-        from .openmm_minimizer import run_openmm_minimization, compute_packaging_metrics
-    except Exception as e:
-        md_metrics["mode"] = "unavailable"
-        md_metrics["details"]["error"] = f"OpenMM import failed: {repr(e)}"
-        _write_metrics(md_metrics_path, md_metrics)
-        design["md_metrics"] = md_metrics
-        return design
-
-    openmm_min_pdb = os.path.join(work_dir, "system_openmm_min.pdb")
-
-    try:
-        outpdb = run_openmm_minimization(
-            input_pdb=packmol_pdb,
-            output_pdb=openmm_min_pdb,
-            max_iterations=int(openmm_max_iterations),
-            repulsion_k=float(openmm_repulsion_k),
-            sigma_nm=float(openmm_sigma_nm),
-            cutoff_nm=1.0,
-            platform_name="CPU",
-            stages=3,
+    if not manifest_path:
+        work_dir = (
+            design.get("work_dir")
+            or design.get("out_dir")
+            or design.get("output_dir")
+            or "."
         )
-        md_metrics["openmm_min_pdb"] = outpdb
+        metrics_json = os.path.join(work_dir, analysis_json_name)
+        md_metrics = {
+            "mode": "failed",
+            "openmm_min_pdb": None,
+            "stability_index": None,
+            "details": {
+                "error": "design 中缺少 manifest_path / agent_manifest_path，无法进行真实最小化"
+            },
+        }
+        _write_json(metrics_json, md_metrics)
+        return md_metrics
 
-        packaging_metrics = None
-        try:
-            packaging_metrics = compute_packaging_metrics(
-                pdb_path=openmm_min_pdb,
-                core_radius_A=125.0,
-                drug_chain_id="D",
-                atoms_per_drug=57,
-            )
-            md_metrics["packaging_metrics"] = packaging_metrics
-        except Exception as e:
-            md_metrics.setdefault("details", {})["packaging_metrics_error"] = repr(e)
-
-        md_metrics["stability_index"] = _packaging_to_stability(packaging_metrics)
-        if md_metrics["stability_index"] is None:
-            md_metrics["stability_index"] = 1.0
-        md_metrics["mode"] = "openmm_repulsion"
-
-    except Exception as e:
-        md_metrics["mode"] = "failed"
-        md_metrics["details"]["error"] = repr(e)
-
-    _write_metrics(md_metrics_path, md_metrics)
-    design["md_metrics"] = md_metrics
-    return design
+    return run_md_validation_from_manifest(
+        manifest_path=manifest_path,
+        candidate_index=int(design.get("candidate_index", 0) or 0),
+        max_iterations=int(openmm_max_iterations),
+    )

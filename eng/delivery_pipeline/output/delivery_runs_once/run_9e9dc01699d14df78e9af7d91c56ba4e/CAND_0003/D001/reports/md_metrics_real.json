@@ -1,0 +1,24 @@
+{
+  "mode": "openmm_amber_minimize",
+  "openmm_min_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/system_openmm_min_real.pdb",
+  "stability_index": 0.6138411419923693,
+  "energy_relaxation": {
+    "drop_per_atom_kj_per_mol": 26072947.158207577
+  },
+  "geometry_check": {
+    "all_atom_rmsd_A": 2.5450674847719155
+  },
+  "packaging_check": {
+    "drug_localization_mean_before_A": 12.464414106427116,
+    "drug_localization_mean_after_A": 12.298881338724199,
+    "drug_localization_shift_A": -0.16553276770291703
+  },
+  "details": {
+    "platform": "CPU",
+    "periodic": null,
+    "nonbonded_method": null,
+    "output_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/system_openmm_min_real.pdb",
+    "state_xml_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/openmm/state.xml",
+    "summary_json_path": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D001/reports/md_metrics_real.json"
+  }
+}

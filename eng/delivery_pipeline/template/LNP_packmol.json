@@ -1,16 +1,16 @@
 {
   "mode": "vesicle_bilayer",
   "tolerance": 2.2,
-  "shell_thickness_A": 42.0,
-  "core_radius_A": 155.0,
-  "outer_radius_A": 225.0,
+  "shell_thickness_A": 40.0,
+  "core_radius_A": 65.0,
+  "outer_radius_A": 105.0,
   "drug_region": "core",
   "drug_count": 40,
   "components": [
     {
       "pdb": "MC3.pdb",
       "role": "outer_leaflet",
-      "count": 150,
+      "count": 300,
       "head_atom_ids": [
         1,
         2,
@@ -45,7 +45,7 @@
     {
       "pdb": "MC3.pdb",
       "role": "inner_leaflet",
-      "count": 130,
+      "count": 118,
       "head_atom_ids": [
         1,
         2,
@@ -80,7 +80,7 @@
     {
       "pdb": "DSPC.pdb",
       "role": "outer_leaflet",
-      "count": 45,
+      "count": 90,
       "head_atom_ids": [
         1,
         2,
@@ -111,7 +111,7 @@
     {
       "pdb": "DSPC.pdb",
       "role": "inner_leaflet",
-      "count": 40,
+      "count": 36,
       "head_atom_ids": [
         1,
         2,
@@ -142,17 +142,17 @@
     {
       "pdb": "CHOL.pdb",
       "role": "outer_leaflet",
-      "count": 120
+      "count": 245
     },
     {
       "pdb": "CHOL.pdb",
       "role": "inner_leaflet",
-      "count": 110
+      "count": 96
     },
     {
       "pdb": "DMG_PEG2000.pdb",
       "role": "outer_leaflet",
-      "count": 10
+      "count": 15
     }
   ]
 }

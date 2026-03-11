@@ -1,0 +1,16 @@
+source leaprc.lipid21
+source leaprc.gaff2
+source leaprc.water.tip3p
+
+loadamberparams drug.frcmod
+DRG = loadmol2 drug.mol2
+loadamberparams HSP.frcmod
+HSP = loadmol2 HSP.mol2
+loadamberparams CHL.frcmod
+CHL = loadmol2 CHL.mol2
+
+SYS = loadpdb packmol_system_for_tleap.pdb
+check SYS
+saveamberparm SYS system.prmtop system.inpcrd
+savepdb SYS system_leap.pdb
+quit

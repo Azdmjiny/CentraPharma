@@ -1,0 +1,32 @@
+name: amber_delivery
+channels:
+  - conda-forge
+  - dacase
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.12
+  - numpy=1.26.4
+  - pandas=3.0.1
+  - scipy
+  - rdkit=2025.09.6
+  - openmm=8.4.0
+  - packmol=21.2.1
+  - ambertools-dac=25.3.0
+  - pdb2pqr=3.6.1
+  - propka=3.5.1
+  - matplotlib
+  - requests
+  - pip
+  - pip:
+      - packmol-memgen==2025.6.30
+      - parmed
+      - pytraj==2.0.6
+      - sander==22.0
+      - pdb4amber==22.0
+      - pymsmt==22.0
+      - amberutils==21.0
+      - mmpbsa-py==16.0
+      - edgembar==3.4
+      - fetkutils==3.3

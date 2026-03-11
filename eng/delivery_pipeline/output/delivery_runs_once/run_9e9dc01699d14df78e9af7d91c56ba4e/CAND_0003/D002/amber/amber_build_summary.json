@@ -1,0 +1,68 @@
+{
+  "success": true,
+  "used_components": [
+    "HSPC.pdb",
+    "CHOL.pdb"
+  ],
+  "component_blocks": [
+    {
+      "unit_name": "DRG",
+      "mol2_name": "drug.mol2",
+      "frcmod_name": "drug.frcmod",
+      "resname": "DRG",
+      "parameter_source": "runtime_from_smiles",
+      "parameter_source_detail": "formal_charge=0",
+      "source_mol2": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/drug.mol2",
+      "source_frcmod": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/drug.frcmod"
+    },
+    {
+      "unit_name": "HSP",
+      "mol2_name": "HSP.mol2",
+      "frcmod_name": "HSP.frcmod",
+      "resname": "HSP",
+      "parameter_source": "template_prebuilt",
+      "parameter_source_detail": "stem:HSPC",
+      "source_mol2": "/root/AIagent/eng/delivery_pipeline/template/HSPC.mol2",
+      "source_frcmod": "/root/AIagent/eng/delivery_pipeline/template/HSPC.frcmod"
+    },
+    {
+      "unit_name": "CHL",
+      "mol2_name": "CHL.mol2",
+      "frcmod_name": "CHL.frcmod",
+      "resname": "CHL",
+      "parameter_source": "template_prebuilt",
+      "parameter_source_detail": "resname:CHL",
+      "source_mol2": "/root/AIagent/eng/delivery_pipeline/template/CHL.mol2",
+      "source_frcmod": "/root/AIagent/eng/delivery_pipeline/template/CHL.frcmod"
+    }
+  ],
+  "parameterization": {
+    "drug_mode": "runtime_from_smiles",
+    "carrier_mode": "template_prebuilt_preferred",
+    "components": [
+      {
+        "component": "drug",
+        "resname": "DRG",
+        "parameter_source": "runtime_from_smiles",
+        "parameter_source_detail": "formal_charge=0"
+      },
+      {
+        "component": "HSPC.pdb",
+        "resname": "HSP",
+        "parameter_source": "template_prebuilt",
+        "parameter_source_detail": "stem:HSPC"
+      },
+      {
+        "component": "CHOL.pdb",
+        "resname": "CHL",
+        "parameter_source": "template_prebuilt",
+        "parameter_source_detail": "resname:CHL"
+      }
+    ]
+  },
+  "normalized_packmol_pdb": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/packmol_system_for_tleap.pdb",
+  "system_prmtop": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/system.prmtop",
+  "system_inpcrd": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/system.inpcrd",
+  "tleap_in": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/tleap.in",
+  "tleap_log": "/root/AIagent/eng/delivery_pipeline/output/delivery_runs_once/run_9e9dc01699d14df78e9af7d91c56ba4e/CAND_0003/D002/amber/tleap.log"
+}

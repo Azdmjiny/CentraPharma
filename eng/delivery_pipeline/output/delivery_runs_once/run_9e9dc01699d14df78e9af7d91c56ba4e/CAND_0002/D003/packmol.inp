@@ -1,0 +1,33 @@
+tolerance 2.000
+filetype pdb
+output system_packmol.pdb
+seed 12345
+
+structure HSPC.pdb
+  number 30
+  inside sphere 0.000 0.000 0.000 78.000
+  outside sphere 0.000 0.000 0.000 45.000
+end structure
+
+structure HSPC.pdb
+  number 15
+  inside sphere 0.000 0.000 0.000 38.000
+  outside sphere 0.000 0.000 0.000 12.000
+end structure
+
+structure CHOL.pdb
+  number 15
+  inside sphere 0.000 0.000 0.000 76.000
+  outside sphere 0.000 0.000 0.000 48.000
+end structure
+
+structure CHOL.pdb
+  number 8
+  inside sphere 0.000 0.000 0.000 35.000
+  outside sphere 0.000 0.000 0.000 15.000
+end structure
+
+structure drug.pdb
+  number 6
+  inside sphere 0.000 0.000 0.000 40.000
+end structure

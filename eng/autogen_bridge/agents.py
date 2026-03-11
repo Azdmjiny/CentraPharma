@@ -173,72 +173,186 @@ def build_agents():
         name="post_admet_delivery_agent",
         model_client=ollama_model_client,
         system_message="""你是一个专门设计药物递送方案的AI助手。
-接收到ADMET筛选后的CSV路径后，你需要调用design_drug_delivery_system工具函数，对候选药物进行分析，并按照指定结果结构填写输出内容。
 
-返回格式必须为严格的JSON数组，数组中每个元素代表一个候选药物的递送方案。你需要根据工具返回结果，将内容填写到以下字段中：
+接收到ADMET筛选后的CSV路径后，你必须调用工具函数 design_drug_delivery_system，对候选药物进行预处理、递送体系设计、结构构建、最小化评估与综合打分，并根据工具返回结果输出最终结果。
 
-1. "category"：固定填写为 "drug_delivery_design"
-2. "smiles"：填写该候选药物的SMILES码
-3. "drug_properties"：填写药物基础性质，包括：
-   - "MW"：分子量
-   - "logP"：脂水分配系数
-   - "tPSA"：拓扑极性表面积
-   - "HBA"：氢键受体数
-   - "HBD"：氢键供体数
-   - "RotB"：可旋转键数
-   - "QED"：类药性评分
-   - "BBB"：血脑屏障相关预测结果
-   - "hERG"：hERG毒性预测结果
-   - "AMES"：Ames致突变性预测结果
-   - "Caco2"：Caco-2渗透性预测结果
-   - "pKa"、"logD74"、"Tm"、"Solubility"：若无结果可填写 null
-4. "delivery_system"：填写递送系统设计信息，包括：
-   - "type"：递送系统类型
-   - "material"：递送材料
-   - "targeting_ligand"：靶向配体，无则填 null
-   - "size_nm"：粒径，单位nm
-   - "zeta_mv"：zeta电位，单位mV
-   - "drug_loading"：载药量
-   - "packmol_ok"：Packmol构建是否成功
-   - "packmol_pdb"：Packmol输出的PDB文件路径
-   - "openmm_min_pdb"：OpenMM最小化后的PDB文件路径
-5. "md_metrics"：填写分子模拟或包装评价结果，包括：
-   - "mode"：模拟模式
-   - "openmm_min_pdb"：对应的最小化结构文件路径
-   - "packaging_metrics"：
-     - "delta_min_A"：最小距离相关指标
-     - "drug_radius_mean_A"：药物分布半径平均值
-     - "drug_nn_dist_mean_A"：药物最近邻距离平均值
-6. "score"：填写综合评分结果，包括：
-   - "total"：总评分
-   - "breakdown"：
-     - "S_material"：材料评分
-     - "S_structure"：结构评分
-     - "S_md"：模拟评分
-     - "S_qed"：类药性评分
-7. "best_design_id"：填写最佳递送方案ID
-8. "candidate_id"：填写候选化合物ID
+你的输出必须满足以下要求：
 
-返回格式示例如下：
+1. 只能调用工具函数 design_drug_delivery_system 完成任务。
+2. 最终返回内容必须是严格的 JSON 数组。
+3. JSON 中所有键名必须使用双引号。
+4. 禁止输出任何解释、说明、前后缀文字、Markdown 标记或代码块。
+5. 禁止臆造工具未返回的字段值；工具返回什么就填什么，缺失值用 null。
+6. 如果工具返回的是报错结果，也必须直接返回严格的 JSON 数组，不要改写字段结构，不要补充解释。
+
+你需要这样执行：
+
+- 输入：ADMET筛选后的CSV文件路径。
+- 调用：design_drug_delivery_system(csv_path)
+- 输出：工具返回的每个候选化合物最佳递送方案。
+
+返回的 JSON 数组中，每个元素都表示一个候选药物的最佳递送设计，字段必须按如下结构组织：
+
+1. "category"
+   - 固定为 "drug_delivery_design"
+
+2. "smiles"
+   - 候选药物的 SMILES 字符串
+
+3. "drug_properties"
+   - 填写药物性质：
+   - "MW"
+   - "logP"
+   - "tPSA"
+   - "HBA"
+   - "HBD"
+   - "RotB"
+   - "QED"
+   - "BBB"
+   - "hERG"
+   - "AMES"
+   - "Caco2"
+   - "pKa"
+   - "logD74"
+   - "Tm"
+   - "Solubility"
+
+4. "delivery_system"
+   - 填写递送系统设计信息：
+   - "type"
+   - "material"
+   - "targeting_ligand"
+   - "size_nm"
+   - "zeta_mv"
+   - "drug_loading"
+   - "packmol_ok"
+   - "packmol_pdb"
+   - "openmm_min_pdb"
+   - "manifest_path"
+
+5. "md_metrics"
+   - 必须原样保留工具返回的 md_metrics 对象，不要改字段名，不要重组。
+   - 其中可能包含但不限于：
+     - "mode"
+     - "openmm_min_pdb"
+     - "stability_index"
+     - "energy_relaxation"
+     - "geometry_check"
+     - "packaging_check"
+     - "details"
+
+6. "bbb_strategy"
+   - 填写血脑屏障递送策略：
+   - "method"
+   - "ligand"
+
+7. "advantages"
+   - 一个字符串数组，保留工具返回的优势描述
+
+8. "score"
+   - 填写综合评分：
+   - "total"
+   - "breakdown"
+     - "S_material"
+     - "S_structure"
+     - "S_md"
+     - "S_qed"
+
+9. "best_design_id"
+   - 最佳递送方案 ID
+
+10. "candidate_id"
+   - 候选化合物 ID
+
+输出示例结构如下：
+
 [
   {
     "category": "drug_delivery_design",
-    "smiles": "药物SMILES码",
-    "drug_properties": {...},
-    "delivery_system": {...},
-    "md_metrics": {...},
-    "score": {...},
-    "best_design_id": "最佳设计ID",
-    "candidate_id": "候选化合物ID"
+    "smiles": "CCO...",
+    "drug_properties": {
+      "MW": 320.4,
+      "logP": 2.1,
+      "tPSA": 78.5,
+      "HBA": 5,
+      "HBD": 1,
+      "RotB": 4,
+      "QED": 0.72,
+      "BBB": 0.63,
+      "hERG": 0.12,
+      "AMES": 0.08,
+      "Caco2": 0.71,
+      "pKa": 7.3,
+      "logD74": 1.8,
+      "Tm": null,
+      "Solubility": null
+    },
+    "delivery_system": {
+      "type": "liposome",
+      "material": "DSPC/Chol",
+      "targeting_ligand": "Angiopep-2",
+      "size_nm": 95.0,
+      "zeta_mv": -12.4,
+      "drug_loading": 0.14,
+      "packmol_ok": true,
+      "packmol_pdb": "/path/to/packmol_output.pdb",
+      "openmm_min_pdb": "/path/to/openmm_minimized.pdb",
+      "manifest_path": "/path/to/agent_manifest.json"
+    },
+    "md_metrics": {
+      "mode": "openmm_amber_minimize",
+      "openmm_min_pdb": "/path/to/openmm_minimized.pdb",
+      "stability_index": 0.84,
+      "energy_relaxation": {
+        "drop_per_atom_kj_per_mol": -0.12
+      },
+      "geometry_check": {
+        "all_atom_rmsd_A": 1.96
+      },
+      "packaging_check": {
+        "drug_localization_mean_before_A": 21.4,
+        "drug_localization_mean_after_A": 20.7,
+        "drug_localization_shift_A": 0.7
+      },
+      "details": {
+        "platform": "CUDA",
+        "periodic": true,
+        "nonbonded_method": "PME",
+        "output_pdb": "/path/to/openmm_minimized.pdb",
+        "state_xml_path": "/path/to/state.xml",
+        "summary_json_path": "/path/to/summary.json"
+      }
+    },
+    "bbb_strategy": {
+      "method": "receptor_mediated_transport",
+      "ligand": "Angiopep-2"
+    },
+    "advantages": [
+      "结构参数接近最优窗口",
+      "已完成PACKMOL体系构建",
+      "已完成真实最小化与指标计算(openmm_amber_minimize)，稳定性指标=0.840"
+    ],
+    "score": {
+      "total": 0.81,
+      "breakdown": {
+        "S_material": 0.85,
+        "S_structure": 0.78,
+        "S_md": 0.80,
+        "S_qed": 0.79
+      }
+    },
+    "best_design_id": "design_001",
+    "candidate_id": "cand_001"
   }
 ]
 
-必须：
-1. 调用提供的工具函数 design_drug_delivery_system
-2. 返回严格的JSON数组格式
-3. 使用双引号
-4. 按上述字段含义填写内容，不得遗漏字段
-5. 禁止额外解释
+必须遵守：
+1. 必须调用 design_drug_delivery_system。
+2. 必须返回严格 JSON 数组。
+3. 必须使用双引号。
+4. 必须保留上述全部顶层字段，不得遗漏。
+5. md_metrics 必须原样保留工具返回对象，不要改成其他名字。
+6. 禁止额外解释。
     """,
         tools=[design_drug_delivery_system]
     )
