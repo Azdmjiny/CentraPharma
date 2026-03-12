@@ -149,7 +149,7 @@ COMPONENT_RESNAME_MAP = {
     "DMG_PEG2000.pdb": "DPG",
     "DSPC.pdb": "DSP",
     "DSPE_PEG2000.pdb": "DSG",
-    "HSPC.pdb": "HSP",
+    "HSPC.pdb": "HSC",
     "MC3.pdb": "MC3",
     "MIGLYOL812.pdb": "MIG",
     "TWEEN80.pdb": "TWE",
@@ -699,6 +699,17 @@ def _build_advanced_packmol_input_from_spec(spec: dict, output_pdb: str, size_nm
             f"  outside sphere {cx:.3f} {cy:.3f} {cz:.3f} {r_in:.3f}",
         ]
 
+    def atoms_shell_block(atom_ids, r_in: float, r_out: float) -> list[str]:
+        atom_ids = _normalize_atom_ids(atom_ids)
+        if not atom_ids:
+            return []
+        return [
+            "  atoms " + " ".join(map(str, atom_ids)),
+            f"    inside sphere {cx:.3f} {cy:.3f} {cz:.3f} {r_out:.3f}",
+            f"    outside sphere {cx:.3f} {cy:.3f} {cz:.3f} {r_in:.3f}",
+            "  end atoms",
+        ]
+
     for comp in components:
         pdb_name = str(comp["pdb"]).strip()
         role = str(comp.get("role", "shell")).strip().lower()
@@ -708,25 +719,46 @@ def _build_advanced_packmol_input_from_spec(spec: dict, output_pdb: str, size_nm
 
         head_atoms = _normalize_atom_ids(comp.get("head_atom_ids", []))
         tail_atoms = _normalize_atom_ids(comp.get("tail_atom_ids", []))
+        head_anchor_atoms = _normalize_atom_ids(comp.get("head_anchor_atom_ids", head_atoms))
+        tail_anchor_atoms = _normalize_atom_ids(comp.get("tail_anchor_atom_ids", tail_atoms))
+
         block = [f"structure {pdb_name}", f"  number {count}"]
 
         if mode == "vesicle_bilayer" and role in ("outer_leaflet", "inner_leaflet"):
             if role == "outer_leaflet":
                 leaflet_r_in = float(comp.get("r_in_A", outer_leaflet_mid - shell_thickness * 0.5))
                 leaflet_r_out = float(comp.get("r_out_A", outer_leaflet_mid + shell_thickness * 0.5))
+                split_r = float(comp.get("split_radius_A", outer_leaflet_mid))
+
+                head_band_in = float(comp.get("head_band_in_A", split_r + 2.0))
+                head_band_out = float(comp.get("head_band_out_A", leaflet_r_out))
+                tail_band_in = float(comp.get("tail_band_in_A", leaflet_r_in))
+                tail_band_out = float(comp.get("tail_band_out_A", split_r - 2.0))
+
                 block += shell_region(leaflet_r_in, leaflet_r_out)
-                if head_atoms:
-                    block += _packmol_atoms_block(head_atoms, f"outside sphere {cx:.3f} {cy:.3f} {cz:.3f} {outer_leaflet_mid:.3f}")
-                if tail_atoms:
-                    block += _packmol_atoms_block(tail_atoms, f"inside sphere {cx:.3f} {cy:.3f} {cz:.3f} {outer_leaflet_mid:.3f}")
+
+                if head_anchor_atoms:
+                    block += atoms_shell_block(head_anchor_atoms, head_band_in, head_band_out)
+                if tail_anchor_atoms:
+                    block += atoms_shell_block(tail_anchor_atoms, tail_band_in, tail_band_out)
+
             else:
                 leaflet_r_in = float(comp.get("r_in_A", inner_leaflet_mid - shell_thickness * 0.5))
                 leaflet_r_out = float(comp.get("r_out_A", inner_leaflet_mid + shell_thickness * 0.5))
+                split_r = float(comp.get("split_radius_A", inner_leaflet_mid))
+
+                head_band_in = float(comp.get("head_band_in_A", leaflet_r_in))
+                head_band_out = float(comp.get("head_band_out_A", split_r - 2.0))
+                tail_band_in = float(comp.get("tail_band_in_A", split_r + 2.0))
+                tail_band_out = float(comp.get("tail_band_out_A", leaflet_r_out))
+
                 block += shell_region(leaflet_r_in, leaflet_r_out)
-                if head_atoms:
-                    block += _packmol_atoms_block(head_atoms, f"inside sphere {cx:.3f} {cy:.3f} {cz:.3f} {inner_leaflet_mid:.3f}")
-                if tail_atoms:
-                    block += _packmol_atoms_block(tail_atoms, f"outside sphere {cx:.3f} {cy:.3f} {cz:.3f} {inner_leaflet_mid:.3f}")
+
+                if head_anchor_atoms:
+                    block += atoms_shell_block(head_anchor_atoms, head_band_in, head_band_out)
+                if tail_anchor_atoms:
+                    block += atoms_shell_block(tail_anchor_atoms, tail_band_in, tail_band_out)
+
         elif role == "core":
             block += [f"  inside sphere {cx:.3f} {cy:.3f} {cz:.3f} {core_radius:.3f}"]
         elif role == "shell":
@@ -757,7 +789,6 @@ def _build_advanced_packmol_input_from_spec(spec: dict, output_pdb: str, size_nm
         lines += ["end structure", ""]
 
     return "\n".join(lines)
-
 
 def _load_material_packmol_spec(component_dir: str, material: str):
     spec_path = os.path.join(component_dir, f"{material}_packmol.json")

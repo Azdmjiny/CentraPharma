@@ -17,7 +17,7 @@ COMPONENT_RESNAME_MAP = {
     "DMG_PEG2000.pdb": "DPG",
     "DSPC.pdb": "DSP",
     "DSPE_PEG2000.pdb": "DSG",
-    "HSPC.pdb": "HSP",
+    "HSPC.pdb": "HSC",
     "MC3.pdb": "MC3",
     "MIGLYOL812.pdb": "MIG",
     "TWEEN80.pdb": "TWE",

@@ -244,8 +244,8 @@ def run_openmm_minimization(
             simulation.context.setPeriodicBoxVectors(*box_vectors)
     except Exception as e:
         if platform.getName() != "CPU" and "CPU" in available_platforms:
-            fallback_from = platform.getName()
-            fallback_error = repr(e)
+            if verbose:
+                print(f"[OPENMM] platform {platform.getName()} 初始化失败，回退到 CPU。错误: {e}")
             cpu_platform = Platform.getPlatformByName("CPU")
             simulation = Simulation(prmtop.topology, system, integrator, cpu_platform, {})
             simulation.context.setPositions(inpcrd.positions)
@@ -262,6 +262,8 @@ def run_openmm_minimization(
 
     state_after = simulation.context.getState(getEnergy=True, getPositions=True)
     e_after = state_after.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+    n_atoms = int(prmtop.topology.getNumAtoms())
+    avg_energy_after_per_atom_kj_per_mol = float(e_after / n_atoms) if n_atoms > 0 else None
 
     with open(output_pdb, "w", encoding="utf-8") as f:
         PDBFile.writeFile(prmtop.topology, state_after.getPositions(), f)
@@ -287,12 +289,9 @@ def run_openmm_minimization(
         "temperature_K": float(temperature_K),
         "friction_per_ps": float(friction_per_ps),
         "timestep_fs": float(timestep_fs),
-        "energy_before_kj_per_mol": float(e_before),
-        "energy_after_kj_per_mol": float(e_after),
-        "energy_drop_kj_per_mol": float(e_before - e_after),
+        "n_atoms": n_atoms,
+        "avg_energy_after_per_atom_kj_per_mol": avg_energy_after_per_atom_kj_per_mol,
     }
-    summary["fallback_from"] = fallback_from
-    summary["fallback_error"] = fallback_error
 
     if summary_json_path:
         with open(summary_json_path, "w", encoding="utf-8") as f:
@@ -312,9 +311,8 @@ def run_openmm_minimization(
         "output_pdb": output_pdb,
         "state_xml_path": state_xml_path,
         "summary_json_path": summary_json_path,
-        "energy_before_kj_per_mol": float(e_before),
-        "energy_after_kj_per_mol": float(e_after),
-        "energy_drop_kj_per_mol": float(e_before - e_after),
+        "n_atoms": n_atoms,
+        "avg_energy_after_per_atom_kj_per_mol": avg_energy_after_per_atom_kj_per_mol,
         "platform": platform.getName(),
         "mode": "openmm_amber_minimize",
     }

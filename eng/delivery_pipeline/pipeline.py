@@ -12,7 +12,7 @@ from .scoring import score_designs
 
 
 DEFAULT_CONFIG = {
-    "max_candidates": 8,
+    "max_candidates": 3,
     "structures_per_candidate": 4,
     "work_root": "output/delivery_runs",
     "packmol_bin": "packmol",
@@ -425,25 +425,14 @@ def _run_real_md_from_manifest(manifest_path: str, max_iterations: int = 5000) -
         except Exception as e:
             result_check = {"error": f"result_check_failed: {e}"}
 
-    atom_count = None
-    if result_check and isinstance(result_check, dict):
-        # 从最小化前 PDB 统计原子数，用于归一化能量变化
-        try:
-            atom_count = len(_read_pdb_atoms(packmol_pdb)) if packmol_pdb and os.path.exists(packmol_pdb) else None
-        except Exception:
-            atom_count = None
-
-    energy_drop = _safe_float(summary.get("energy_drop_kj_per_mol"), None)
-    energy_drop_per_atom = None
-    if energy_drop is not None and atom_count and atom_count > 0:
-        energy_drop_per_atom = float(energy_drop) / float(atom_count)
-
     md_metrics = {
         "mode": "openmm_amber_minimize",
         "openmm_min_pdb": output_pdb,
         "stability_index": stability_index,
         "energy_relaxation": {
-            "drop_per_atom_kj_per_mol": energy_drop_per_atom,
+            "avg_energy_after_per_atom_kj_per_mol": _safe_float(
+                summary.get("avg_energy_after_per_atom_kj_per_mol"), None
+            ),
         },
         "geometry_check": {
             "all_atom_rmsd_A": None if not result_check else result_check.get("all_atom_rmsd_A"),

@@ -1,4 +1,9 @@
 ### 请先确保下载好miniconda
+`wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh`
+`bash Miniconda3-latest-Linux-x86_64.sh`
+`source ~/miniconda3/bin/activate`
+`conda init`
+
 
 ### conda环境搭建
 `conda env create -f environment.yml -n agent`
