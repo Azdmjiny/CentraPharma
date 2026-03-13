@@ -11,7 +11,8 @@ dependencies:
   - pandas=3.0.1
   - scipy
   - rdkit=2025.09.6
-  - openmm=8.4.0
+  - openmm=8.4.*
+  - cuda-version=12
   - cuda-version=12
   - packmol=21.2.1
   - ambertools-dac=25.3.0
