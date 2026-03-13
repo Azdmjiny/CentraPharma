@@ -184,6 +184,7 @@ def build_clean_row(row, smiles_col, pka_mean, pka_near_7, pka_near_74, logd7, l
         "RotB",
         "QED_rdkit",
         "BBB",
+        "BBB_Martins",
         "hERG",
         "AMES",
         "Caco2",
@@ -202,6 +203,11 @@ def build_clean_row(row, smiles_col, pka_mean, pka_near_7, pka_near_74, logd7, l
     # 统一 smiles 列名
     if smiles_col in out and smiles_col != "smiles":
         out["smiles"] = out.pop(smiles_col)
+
+    # 兼容上游 ADMETModel 列名：很多流程输出 BBB_Martins 而不是 BBB。
+    # 下游 delivery_pipeline 优先读取 BBB，因此这里补齐同义字段，避免 BBB 变成默认 0.0。
+    if is_missing(out.get("BBB")) and not is_missing(out.get("BBB_Martins")):
+        out["BBB"] = out.get("BBB_Martins")
 
     out["pKa"] = pka_mean
     out["pKa_near_7"] = pka_near_7
@@ -307,6 +313,7 @@ def main():
         "RotB",
         "QED_rdkit",
         "BBB",
+        "BBB_Martins",
         "hERG",
         "AMES",
         "Caco2",
