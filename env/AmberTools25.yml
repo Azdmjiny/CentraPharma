@@ -8,12 +8,12 @@ channels:
 dependencies:
   - python=3.12
   - numpy=1.26.4
-  - pandas=3.0.1
+  - pandas<3
   - scipy
   - rdkit=2025.09.6
-  - openmm=8.4.*
-  - cuda-version=12
-  - cuda-version=12
+  - openmm=8.2.*
+  - cuda-version=12.4
+  - cuda-nvrtc=12.4.*
   - packmol=21.2.1
   - ambertools-dac=25.3.0
   - pdb2pqr=3.6.1
